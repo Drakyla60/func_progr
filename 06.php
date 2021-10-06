@@ -10,30 +10,30 @@ function createSimpleCost(): Closure
     };
 }
 
-function createPriceBetweenCost(callable $nextFunction, $min, $max, $percent): Closure
+function createPriceBetweenCost(callable $next, $min, $max, $percent): Closure
 {
-    return function (array $items) use ($nextFunction, $min, $max, $percent) {
+    return function (array $items) use ($next, $min, $max, $percent) {
         $discount = 0;
         foreach ($items as $item) {
             if ($min <= $item['price'] && $item['price'] <= $max) {
                 $discount += ($percent / 100) * $item['price'] * $item['count'];
             }
         }
-        return $nextFunction($items) - $discount;
+        return $next($items) - $discount;
     };
 }
 
-function createMonthCost(callable $nextFunction, $day, $needle, $percent): Closure
+function createMonthCost(callable $next, $day, $needle, $percent): Closure
 {
-    return function (array $items) use ($nextFunction, $day, $needle, $percent) {
-        return ($day == $needle) ? (1 - $percent / 100) * $nextFunction($items) : $nextFunction($items);
+    return function (array $items) use ($next, $day, $needle, $percent) {
+        return ($day == $needle) ? (1 - $percent / 100) * $next($items) : $next($items);
     };
 }
 
-function createBigCost(callable $nextFunction, $limit, $percent): Closure
+function createBigCost(callable $next, $limit, $percent): Closure
 {
-    return function (array $items) use ($nextFunction, $limit, $percent) {
-        $cost = $nextFunction($items);
+    return function (array $items) use ($next, $limit, $percent) {
+        $cost = $next($items);
         return ($cost >= $limit) ? (1 - $percent / 100) * $cost : $cost;
     };
 }
