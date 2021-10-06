@@ -25,8 +25,23 @@ function sum(array $items) {
     }
 }
 
+/**
+ * Піднімає всі значення масиву до квадрату
+ * @param array $items
+ * @return array
+ */
+function square(array $items): array
+{
+    $result = [];
+    foreach ($items as $item) {
+        $result[] = $item * $item;
+    }
+    return $result;
+}
+
 $items = [5, 4, 3, 2, 1];
 
 
 echo sum($items) . PHP_EOL;
+var_dump(square($items));
 
