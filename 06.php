@@ -1,12 +1,14 @@
 <?php
-
-$simpleCost = function (array $items) {
-    $cost = 0;
-    foreach ($items as $item) {
-        $cost += $item['price'] * $item['count'];
-    }
-    return $cost;
-};
+function createSimpleCost(): Closure
+{
+    return function (array $items) {
+        $cost = 0;
+        foreach ($items as $item) {
+            $cost += $item['price'] * $item['count'];
+        }
+        return $cost;
+    };
+}
 
 function createPriceBetweenCost(callable $nextFunction, $min, $max, $percent): Closure
 {
@@ -37,7 +39,7 @@ function createBigCost(callable $nextFunction, $limit, $percent): Closure
 }
 
 #################
-
+$simpleCost = createSimpleCost();
 $priceBetweenCost = createPriceBetweenCost($simpleCost, 100, 150, 9);
 $monthCost = createMonthCost($priceBetweenCost, date('d'), 15, 5);
 $cost = createBigCost($monthCost, 1000, 7);
@@ -49,10 +51,4 @@ $items = [
     ['count' => 1, 'price' => 122],
 ];
 
-$items2 = [
-    ['count' => 4, 'price' => 72],
-    ['count' => 12, 'price' => 122],
-];
-
 echo $cost($items) . PHP_EOL;
-echo $cost($items2) . PHP_EOL;
