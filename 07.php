@@ -39,6 +39,23 @@ function square(array $items): array
     return $result;
 }
 
+/**
+ * Повератє масив парних значень
+ * $item % 2 == 1 поверне непарні
+ * @param array $items
+ * @return array
+ */
+function even(array $items): array
+{
+    $result = [];
+    foreach ($items as $item) {
+        if ($item % 2 == 0) {
+            $result[] = $item;
+        }
+    }
+    return $result;
+}
+
 $items = [5, 4, 3, 2, 1];
 
 
