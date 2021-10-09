@@ -9,7 +9,8 @@ function normalizeUrl($url): string
     return 'https://yiiframework.ru/forum/' . ltrim($url, './');
 }
 
-function getHtml($url) {
+function getHtml($url)
+{
     return file_get_contents(normalizeUrl($url));
 }
 
@@ -19,8 +20,11 @@ $html = getHtml($forumUrl);
 
 $crawler = new Crawler($html);
 
-print_r($crawler
+$page = $crawler
     ->filter('div.action-bar.bar-top .pagination li:nth-last-of-type(2)')
-    ->text());
+    ->each(function (Crawler $link) {
+        return intval($link->text());
+    });
 
+echo max(reset($page), 1);
 echo PHP_EOL;
