@@ -38,23 +38,34 @@ function getForumMaxPageNumber($forumUrl) {
             return intval($link->text());
         });
 
-    return max(reset($page), 1);
+    return max(first($page), 1);
 }
 
 function getForumPages($forumUrl): array
 {
     echo 'Forum pages for' . clearUrl($forumUrl). PHP_EOL;
-    $getMaxPageNumber = getForumMaxPageNumber($forumUrl);
-    $result = [];
-    foreach (range(1, $getMaxPageNumber) as $number) {
-        $result[] = $forumUrl . ($number > 1 ? '&start=' . (25 * ($number - 1)) : '');
-    }
-    return $result;
+
+    return array_map(function ($number) use ($forumUrl) {
+        return $forumUrl . ($number > 1 ? '&start=' . (25 * ($number - 1)) : '');
+    }, range(1, getForumMaxPageNumber($forumUrl)));
 }
 
-echo clearUrl(print_r(getForumPages($forumUrl)));
+function getForumPageTopics($forumPageUrl) {
+    echo 'Forum pages topics for' . clearUrl($forumPageUrl). PHP_EOL;
+    $html = getHtml($forumPageUrl);
+    return(new Crawler($html))
+        ->filter('ul.topiclist.topics li dl')
+        ->each(function (Crawler $crawler) {
+            $link = $crawler->filter('div.list-inner a.topictitle');
+            return [
+                'title' => $link->html(),
+                'url' => $link->attr('href'),
+                'count' => intval($crawler->filter('dd.posts')->text()) + 1,
+            ];
+        });
+}
+$forumPages = getForumPages($forumUrl);
 
-
-//echo getForumMaxPageNumber($forumUrl);
+echo clearUrl(print_r(getForumPageTopics($forumPages[0]), true));
 
 echo PHP_EOL;
