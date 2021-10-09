@@ -9,6 +9,7 @@ $forumUrl = './viewforum.php?f=28';
 
 #######
 
+####### Util
 function first($array) {
     return reset($array);
 }
@@ -20,25 +21,38 @@ function normalizeUrl($url): string
 
 function getHtml($url)
 {
-    return file_get_contents(normalizeUrl($url));
+    $file = __DIR__ . '/cache/' . md5($url);
+
+    if (file_exists($file)) {
+        return unserialize(file_get_contents($file));
+    } else {
+        $html = file_get_contents($url);
+        file_put_contents($file, serialize($html));
+        return $html;
+    }
+}
+
+function crawler($url): Crawler
+{
+    return new Crawler(getHtml(normalizeUrl($url)));
 }
 
 function clearUrl($url) {
     return preg_replace('#\&sid=.{32}#s', '', $url);
 }
 
-function getForumMaxPageNumber($forumUrl) {
+######
 
-    $html = getHtml($forumUrl);
-    $crawler = new Crawler($html);
 
-    $page = $crawler
+###### Parse
+
+function getForumMaxPageNumber($forumUrl)
+{
+    return max(first(crawler($forumUrl)
         ->filter('div.action-bar.bar-top .pagination li:nth-last-of-type(2)')
         ->each(function (Crawler $link) {
             return intval($link->text());
-        });
-
-    return max(first($page), 1);
+        })), 1);
 }
 
 function getForumPages($forumUrl): array
@@ -50,10 +64,11 @@ function getForumPages($forumUrl): array
     }, range(1, getForumMaxPageNumber($forumUrl)));
 }
 
-function getForumPageTopics($forumPageUrl) {
+function getForumPageTopics($forumPageUrl): array
+{
     echo 'Forum pages topics for' . clearUrl($forumPageUrl). PHP_EOL;
-    $html = getHtml($forumPageUrl);
-    return(new Crawler($html))
+
+    return crawler($forumPageUrl)
         ->filter('ul.topiclist.topics li dl')
         ->each(function (Crawler $crawler) {
             $link = $crawler->filter('div.list-inner a.topictitle');
@@ -64,6 +79,8 @@ function getForumPageTopics($forumPageUrl) {
             ];
         });
 }
+
+#######
 $forumPages = getForumPages($forumUrl);
 
 echo clearUrl(print_r(getForumPageTopics($forumPages[0]), true));
