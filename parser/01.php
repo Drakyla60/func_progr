@@ -68,19 +68,17 @@ function getHtml($url)
     return file_get_contents($url);
 }
 
-$normalizeUrl = createNormalizeUrl('https://yiiframework.ru/forum/');
-$getContent = fileCache('getHtml', __DIR__ . '/cache');
-
-
 /**
  * Допоміжний метод для парсингу адреси
- * @param $url
- * @return Crawler
+ * @param callable $getContent
+ * @param callable $normalizeUrl
+ * @return Closure
  */
-function crawler($url): Crawler
+function createCrawler(callable $getContent, callable $normalizeUrl): Closure
 {
-    global $getContent, $normalizeUrl;
-    return new Crawler($getContent($normalizeUrl($url)));
+    return function ($url) use ($getContent, $normalizeUrl) {
+        return new Crawler($getContent($normalizeUrl($url)));
+    };
 }
 
 /**
@@ -94,6 +92,7 @@ function clearUrl($url)
 }
 
 /**
+ * Функція для виводу використаної Оперативної памяті
  * @param $memory
  * @return string
  */
@@ -114,7 +113,8 @@ function formatUsage($memory): string
  */
 function getForumMaxPageNumber($forumUrl)
 {
-    return max(first(crawler($forumUrl)
+    global $crawler;
+    return max(first($crawler($forumUrl)
         ->filter('div.action-bar.bar-top .pagination li:nth-last-of-type(2)')
         ->each(function (Crawler $link) {
             return intval($link->text());
@@ -144,8 +144,8 @@ function getForumPages($forumUrl): array
 function getForumPageTopics($forumPageUrl): array
 {
     echo 'Forum pages topics for' . clearUrl($forumPageUrl) . PHP_EOL;
-
-    return crawler($forumPageUrl)
+    global $crawler;
+    return $crawler($forumPageUrl)
         ->filter('ul.topiclist.topics li dl')
         ->each(function (Crawler $crawler) {
             $link = $crawler->filter('div.list-inner a.topictitle');
@@ -204,6 +204,12 @@ function parallel_map(callable $func, array $items) {
 #######Config
 
 $forumUrl = './viewforum.php?f=28';
+
+
+$normalizeUrl = createNormalizeUrl('https://yiiframework.ru/forum/');
+$getContent = fileCache('getHtml', __DIR__ . '/cache');
+
+$crawler = createCrawler($getContent, $normalizeUrl);
 
 #######
 
