@@ -237,6 +237,34 @@ function parallel_map(callable $func, array $items)
 }
 
 
+function squashProfiles(array $total, array $current) {
+    $existsFilter = function ($item) use ($current) {
+        return $item['username'] === $current['username'];
+    };
+    $notExistsFilter = function ($item) use ($current) {
+        return $item['username'] !== $current['username'];
+    };
+    $increase = function ($exists) {
+        return [
+            'username' => $exists['username'],
+            'count' => $exists['count'] + 1,
+            'total' => $exists['total'],
+        ];
+    };
+    $create = function ($current) {
+        return [
+            'username' => $current['username'],
+            'count' => 1,
+            'total' => $current['total'],
+        ];
+    };
+    if ($exists = first(array_filter($total, $existsFilter))) {
+        return array_merge(array_filter($total, $notExistsFilter), [$increase($exists)]);
+    } else {
+        return array_merge($total, [$create($current)]);
+    }
+}
+
 #######Config
 $normalizeUrl = createNormalizeUrl('https://yiiframework.ru/forum/');
 $forumUrl = './viewforum.php?f=28';
@@ -253,13 +281,14 @@ $getTopicPages = createGetTopicPages(20);
 $getTopicPageProfiles = createGetTopicPageProfiles($crawler);
 
 $topics =
+    reduce('squashProfiles',
     reduce('array_merge',
         array_map($getTopicPageProfiles,
             reduce('array_merge',
                 array_map($getTopicPages,
                     reduce('array_merge',
                         array_map($getForumPageTopics,
-                            $getForumPages($forumUrl)), [])), [])), []);
+                            $getForumPages($forumUrl)), [])), [])), []), []);
 
 #######
 
