@@ -45,7 +45,7 @@ function createNormalizeUrl($baseUrl): Closure
  */
 function fileCache(callable $func, $path): Closure
 {
-    return  function () use ($func, $path) {
+    return function () use ($func, $path) {
         $args = func_get_args();
         $file = $path . '/' . md5(serialize($args));
         if (file_exists($file)) {
@@ -103,58 +103,94 @@ function formatUsage($memory): string
 
 ######
 
-
 ###### Parse
 
 /**
  * Рахує кулькість сторінок з темами форума за $forumUrl
- * @param $forumUrl
- * @return mixed
+ * @param callable $crawler
+ * @return Closure
  */
-function getForumMaxPageNumber($forumUrl)
+function createGetForumMaxPageNumber(callable $crawler): Closure
 {
-    global $crawler;
-    return max(first($crawler($forumUrl)
-        ->filter('div.action-bar.bar-top .pagination li:nth-last-of-type(2)')
-        ->each(function (Crawler $link) {
-            return intval($link->text());
-        })), 1);
+    return function ($url) use ($crawler) {
+        return max(
+            first($crawler($url)
+                ->filter('div.action-bar.bar-top .pagination li:nth-last-of-type(2)')
+                ->each(function (Crawler $link) {
+                    return intval($link->text());
+                })), 1);
+    };
 }
+
 
 /**
  * Парсить теми форума за адресою $forumUrl
- * @param $forumUrl
- * @return array
+ * @param callable $getForumMaxPageNumber
+ * @param $perPage
+ * @return Closure
  */
-function getForumPages($forumUrl): array
+function createGetForumPages(callable $getForumMaxPageNumber, $perPage): Closure
 {
-    echo 'Forum pages for' . clearUrl($forumUrl) . PHP_EOL;
+    return function ($forumUrl) use ($getForumMaxPageNumber, $perPage) {
+        echo 'Forum pages for' . clearUrl($forumUrl) . PHP_EOL;
 
-    return array_map(function ($number) use ($forumUrl) {
-        return $forumUrl . ($number > 1 ? '&start=' . (25 * ($number - 1)) : '');
-    }, range(1, getForumMaxPageNumber($forumUrl)));
+        return array_map(function ($number) use ($forumUrl, $perPage) {
+            return $forumUrl . ($number > 1 ? '&start=' . ($perPage * ($number - 1)) : '');
+        }, range(1, $getForumMaxPageNumber($forumUrl)));
+    };
 }
+
 
 /**
  * Парсить пости форума за адресою $forumPageUrl
  * в count зберігає к-сть коментарів
- * @param $forumPageUrl
- * @return array
+ * @param callable $crawler
+ * @return Closure
  */
-function getForumPageTopics($forumPageUrl): array
+function createGetForumPageTopics(callable $crawler): Closure
 {
-    echo 'Forum pages topics for' . clearUrl($forumPageUrl) . PHP_EOL;
-    global $crawler;
-    return $crawler($forumPageUrl)
-        ->filter('ul.topiclist.topics li dl')
-        ->each(function (Crawler $crawler) {
-            $link = $crawler->filter('div.list-inner a.topictitle');
-            return [
-                'title' => $link->html(),
-                'url' => $link->attr('href'),
-                'count' => intval($crawler->filter('dd.posts')->text()) + 1,
-            ];
-        });
+    return function ($forumPageUrl) use ($crawler) {
+        echo 'Forum pages topics for' . clearUrl($forumPageUrl) . PHP_EOL;
+        return $crawler($forumPageUrl)
+            ->filter('ul.topiclist.topics li dl')
+            ->each(function (Crawler $crawler) {
+                $link = $crawler->filter('div.list-inner a.topictitle');
+                return [
+                    'title' => $link->html(),
+                    'url' => $link->attr('href'),
+                    'count' => intval($crawler->filter('dd.posts')->text()) + 1,
+                ];
+            });
+    };
+}
+
+function createGetTopicPages($perPage): Closure
+{
+    return function ($topic) use ($perPage) {
+        echo 'Forum pages for' . clearUrl($topic['url']) . PHP_EOL;
+        return array_map(function ($number) use ($topic, $perPage) {
+            return $topic['url'] . ($number > 1 ? '&start=' . ($perPage * ($number - 1)) : '');
+        }, range(1, intval(($topic['count'] - 1) / $perPage) + 1));
+    };
+}
+
+/**
+ * @param callable $crawler
+ * @return Closure
+ */
+function createGetTopicPageProfiles(callable $crawler): Closure
+{
+    return function ($topicPageUrl) use ($crawler) {
+        echo 'Topic profiles for ' . clearUrl($topicPageUrl) . PHP_EOL;
+        return $crawler($topicPageUrl)
+            ->filter('dl.postprofile')
+            ->each(function (Crawler $profile) {
+                return [
+                    'username' => $profile->filter('dt a.username, dt a.username-coloured')->text(),
+                    'total' => $profile->filter('dd.profile-posts a')->text(),
+                ];
+            });
+    };
 }
 
 /**
@@ -164,7 +200,8 @@ function getForumPageTopics($forumPageUrl): array
  * @param array $items
  * @return array|void
  */
-function parallel_map(callable $func, array $items) {
+function parallel_map(callable $func, array $items)
+{
     $childPids = [];
     $result = [];
     foreach ($items as $i => $item) {
@@ -177,7 +214,7 @@ function parallel_map(callable $func, array $items) {
 
                 foreach ($childPids as $childPid) {
                     pcntl_waitpid($childPid, $status);
-                    $sharedId = shmop_open($childPid, 'a',0, 0);
+                    $sharedId = shmop_open($childPid, 'a', 0, 0);
                     $shareData = shmop_read($sharedId, 0, shmop_size($sharedId));
                     $result[] = unserialize($shareData);
                     shmop_delete($sharedId);
@@ -200,28 +237,34 @@ function parallel_map(callable $func, array $items) {
 }
 
 
-
 #######Config
-
-$forumUrl = './viewforum.php?f=28';
-
-
 $normalizeUrl = createNormalizeUrl('https://yiiframework.ru/forum/');
+$forumUrl = './viewforum.php?f=28';
 $getContent = fileCache('getHtml', __DIR__ . '/cache');
+#######
 
+
+####### Logic
 $crawler = createCrawler($getContent, $normalizeUrl);
+$getForumMaxPageNumber = createGetForumMaxPageNumber($crawler);
+$getForumPages = createGetForumPages($getForumMaxPageNumber, 25);
+$getForumPageTopics = createGetForumPageTopics($crawler);
+$getTopicPages = createGetTopicPages(20);
+$getTopicPageProfiles = createGetTopicPageProfiles($crawler);
+
+$topics =
+    reduce('array_merge',
+        array_map($getTopicPageProfiles,
+            reduce('array_merge',
+                array_map($getTopicPages,
+                    reduce('array_merge',
+                        array_map($getForumPageTopics,
+                            $getForumPages($forumUrl)), [])), [])), []);
 
 #######
-
-
-#######
-$topics = reduce('array_merge',
-    array_map('getForumPageTopics',
-//    parallel_map('getForumPageTopics',
-        getForumPages($forumUrl)), []);
 
 echo 'Done ' . formatUsage(memory_get_peak_usage()) . PHP_EOL;
 
-echo clearUrl(print_r($topics[0], true));
+echo clearUrl(print_r($topics, true));
 
 echo PHP_EOL;
