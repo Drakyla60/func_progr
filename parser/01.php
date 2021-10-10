@@ -2,13 +2,6 @@
 
 use Symfony\Component\DomCrawler\Crawler;
 
-
-#######Config
-
-$forumUrl = './viewforum.php?f=28';
-
-#######
-
 ####### Util
 /**
  * Повертає перший елемент масива
@@ -34,21 +27,24 @@ function reduce(callable $function, array $array, $initial = null)
 
 /**
  * Нормалізація адреси $url
- * @param $url
- * @return string
+ * @param $baseUrl
+ * @return Closure
  */
-function normalizeUrl($url): string
+function createNormalizeUrl($baseUrl): Closure
 {
-    return 'https://yiiframework.ru/forum/' . ltrim($url, './');
+    return function ($url) use ($baseUrl) {
+        return $baseUrl . ltrim($url, './');
+    };
 }
 
 /**
- * Парсинг сторінки за $url і кешування
- * @param $url
- * @return false|mixed|string
+ *  Записує в кеш то шо прийшло в анонімні функції
+ * @param callable $func
+ * @param $path
+ * @return Closure
  */
-
-function fileCache(callable $func, $path) {
+function fileCache(callable $func, $path): Closure
+{
     return  function () use ($func, $path) {
         $args = func_get_args();
         $file = $path . '/' . md5(serialize($args));
@@ -62,11 +58,17 @@ function fileCache(callable $func, $path) {
     };
 }
 
+/**
+ * Парсинг сторінки за $url
+ * @param $url
+ * @return false|string
+ */
 function getHtml($url)
 {
     return file_get_contents($url);
 }
 
+$normalizeUrl = createNormalizeUrl('https://yiiframework.ru/forum/');
 $getContent = fileCache('getHtml', __DIR__ . '/cache');
 
 
@@ -77,8 +79,8 @@ $getContent = fileCache('getHtml', __DIR__ . '/cache');
  */
 function crawler($url): Crawler
 {
-    global $getContent;
-    return new Crawler($getContent(normalizeUrl($url)));
+    global $getContent, $normalizeUrl;
+    return new Crawler($getContent($normalizeUrl($url)));
 }
 
 /**
@@ -196,6 +198,15 @@ function parallel_map(callable $func, array $items) {
     }
     return $result;
 }
+
+
+
+#######Config
+
+$forumUrl = './viewforum.php?f=28';
+
+#######
+
 
 #######
 $topics = reduce('array_merge',
