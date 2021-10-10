@@ -1,0 +1,21 @@
+version: '3'
+services:
+  app:
+    build:
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www
+    environment:
+      XDEBUG_CONFIG: "remote_host=host.docker.internal remote_enable=1"
+      PHP_IDE_CONFIG: "serverName=Docker"
+
+#  db:
+#    image: mysql:5.7
+#    restart: always
+#    environment:
+#      MYSQL_ROOT_PASSWORD: root
+#      MYSQL_DATABASE: laminas_blog
+#    ports:
+#      - 3306:3306
