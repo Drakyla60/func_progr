@@ -101,10 +101,28 @@ function formatUsage($memory): string
     return number_format($memory / 1024 / 1024, 2, '.', ' ') . ' Mb';
 }
 
+/**
+ * @param callable $func
+ * @param array $array
+ * @return mixed|null
+ */
+function flat_map(callable $func, array $array) {
+    return reduce('array_merge',
+        array_map($func, $array), []);
+}
+
+/**
+ * @param callable $func
+ * @param array $array
+ * @return mixed|null
+ */
+function parallel_flat_map(callable $func, array $array) {
+    return reduce('array_merge',
+        parallel_map($func, $array), []);
+}
 ######
 
 ###### Parse
-
 /**
  * Рахує кулькість сторінок з темами форума за $forumUrl
  * @param callable $crawler
@@ -122,7 +140,6 @@ function createGetForumMaxPageNumber(callable $crawler): Closure
     };
 }
 
-
 /**
  * Парсить теми форума за адресою $forumUrl
  * @param callable $getForumMaxPageNumber
@@ -139,7 +156,6 @@ function createGetForumPages(callable $getForumMaxPageNumber, $perPage): Closure
         }, range(1, $getForumMaxPageNumber($forumUrl)));
     };
 }
-
 
 /**
  * Парсить пости форума за адресою $forumPageUrl
@@ -164,6 +180,11 @@ function createGetForumPageTopics(callable $crawler): Closure
     };
 }
 
+/**
+ * Порсить сторінки топіків
+ * @param $perPage
+ * @return Closure
+ */
 function createGetTopicPages($perPage): Closure
 {
     return function ($topic) use ($perPage) {
@@ -175,6 +196,7 @@ function createGetTopicPages($perPage): Closure
 }
 
 /**
+ * Парсить профілі з топіків
  * @param callable $crawler
  * @return Closure
  */
@@ -236,8 +258,27 @@ function parallel_map(callable $func, array $items)
     return $result;
 }
 
+/**
+ * @param callable $getTopicPageProfiles
+ * @return Closure
+ */
+function createBatchGetTopicPagesProfiles(callable $getTopicPageProfiles): Closure
+{
+    return function (array $urls) use ($getTopicPageProfiles) {
+        return reduce('array_merge',
+            parallel_map($getTopicPageProfiles,
+                $urls), []);
+    };
+}
 
-function squashProfiles(array $total, array $current) {
+/**
+ * Відфільтровує однакові профілі
+ * @param array $total
+ * @param array $current
+ * @return array
+ */
+function squashProfiles(array $total, array $current): array
+{
     $existsFilter = function ($item) use ($current) {
         return $item['username'] === $current['username'];
     };
@@ -265,9 +306,34 @@ function squashProfiles(array $total, array $current) {
     }
 }
 
+
+/**
+ * Функція яка парсить профілі
+ * @param $squashProfiles
+ * @param $batchGetTopicPagesProfiles
+ * @param $getTopicPages
+ * @param $getForumPageTopics
+ * @param $getForumPages
+ * @param $chunkSize
+ * @return Closure
+ */
+function createParseForumProfiles($squashProfiles, $batchGetTopicPagesProfiles, $getTopicPages, $getForumPageTopics, $getForumPages, $chunkSize): Closure
+{
+    return function ($url) use ($squashProfiles, $batchGetTopicPagesProfiles, $getTopicPages, $getForumPageTopics, $getForumPages, $chunkSize) {
+        return
+            reduce($squashProfiles,
+                flat_map($batchGetTopicPagesProfiles,
+//                    array_chunk( // розкоментувати
+                        flat_map($getTopicPages,
+                            flat_map($getForumPageTopics, //parallel_flat_map замість flat_map для паралельного
+                                $getForumPages($url)))
+//                        , $chunkSize)
+                ), []);
+    };
+}
+
 #######Config
 $normalizeUrl = createNormalizeUrl('https://yiiframework.ru/forum/');
-$forumUrl = './viewforum.php?f=28';
 $getContent = fileCache('getHtml', __DIR__ . '/cache');
 #######
 
@@ -279,21 +345,22 @@ $getForumPages = createGetForumPages($getForumMaxPageNumber, 25);
 $getForumPageTopics = createGetForumPageTopics($crawler);
 $getTopicPages = createGetTopicPages(20);
 $getTopicPageProfiles = createGetTopicPageProfiles($crawler);
+$batchGetTopicPagesProfiles = createBatchGetTopicPagesProfiles($getTopicPageProfiles);
 
-$topics =
-    reduce('squashProfiles',
-    reduce('array_merge',
-        array_map($getTopicPageProfiles,
-            reduce('array_merge',
-                array_map($getTopicPages,
-                    reduce('array_merge',
-                        array_map($getForumPageTopics,
-                            $getForumPages($forumUrl)), [])), [])), []), []);
+$parse = createParseForumProfiles('squashProfiles',
+    $getTopicPageProfiles, // $batchGetTopicPagesProfiles замість $getTopicPageProfiles для паралельного
+    $getTopicPages,
+    $getForumPageTopics,
+    $getForumPages,
+    10);
+$profiles = $parse('./viewforum.php?f=34');
+//$profiles = array_map($parse,['./viewforum.php?f=34', './viewforum.php?f=35']);
+//$profiles = reduce('array_merge', array_map($parse,[ './viewforum.php?f=34']), []);
 
 #######
 
 echo 'Done ' . formatUsage(memory_get_peak_usage()) . PHP_EOL;
 
-echo clearUrl(print_r($topics, true));
+echo clearUrl(print_r($profiles, true));
 
 echo PHP_EOL;
